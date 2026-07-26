@@ -1,0 +1,36 @@
+# Android Open Builder runtime data
+.aob/
+cache/
+downloads/
+logs/
+output/
+work/
+
+# Local configuration and secrets
+config/local.conf
+.env
+.env.*
+!.env.example
+*.keystore
+*.jks
+*.p12
+*.pem
+*.key
+
+# Android and Gradle generated data
+.gradle/
+local.properties
+**/build/
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Editor and operating-system files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
