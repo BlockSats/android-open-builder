@@ -32,12 +32,13 @@ while (($#)); do
   shift
 done
 
-[[ "$(uname -s)" == Linux ]] || aob_die "$AOB_EXIT_PREREQ" 'The installer currently supports Linux only.'
-[[ "$(uname -m)" == x86_64 ]] || aob_die "$AOB_EXIT_PREREQ" 'The installer currently supports x86_64 only.'
-command -v java >/dev/null || aob_die "$AOB_EXIT_PREREQ" 'Java 17 is required.'
-command -v curl >/dev/null || aob_die "$AOB_EXIT_PREREQ" 'curl is required.'
-command -v unzip >/dev/null || aob_die "$AOB_EXIT_PREREQ" 'unzip is required.'
-command -v sha256sum >/dev/null || aob_die "$AOB_EXIT_PREREQ" 'sha256sum is required.'
+[[ "$(uname -s)" == Linux ]] || aob_die "$AOB_EXIT_PREREQUISITE" 'The installer currently supports Linux only.'
+[[ "$(uname -m)" == x86_64 ]] || aob_die "$AOB_EXIT_PREREQUISITE" 'The installer currently supports x86_64 only.'
+command -v java >/dev/null || aob_die "$AOB_EXIT_PREREQUISITE" 'Java 17 runtime is required.'
+command -v javac >/dev/null || aob_die "$AOB_EXIT_PREREQUISITE" 'Java 17 JDK is required; javac is missing.'
+command -v curl >/dev/null || aob_die "$AOB_EXIT_PREREQUISITE" 'curl is required.'
+command -v unzip >/dev/null || aob_die "$AOB_EXIT_PREREQUISITE" 'unzip is required.'
+command -v sha256sum >/dev/null || aob_die "$AOB_EXIT_PREREQUISITE" 'sha256sum is required.'
 
 if [[ "$accept_licenses" != true ]]; then
   cat >&2 <<'EOF'
