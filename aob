@@ -21,7 +21,7 @@ Commands:
   install [options]       Install the project-managed Android toolchain
   list                    List available builders
   info <builder>          Show builder metadata
-  build <builder>         Run a builder (RetroArch is not implemented yet)
+  build <builder>         Build project artifacts
   paths                   Show resolved local paths
   version                 Show the project version
   help                    Show this help
