@@ -11,11 +11,11 @@ builder_metadata() {
   cat <<EOF_METADATA
 name=retroarch
 display_name=RetroArch AOB
-status=smoke-build
+status=bundled-core-build
 target=Android ARM64
 frontend_revision=$RETROARCH_REVISION
 default_cores=$RETROARCH_DEFAULT_CORES
-core_bundled_in_apk=no
+core_bundled_in_apk=yes
 EOF_METADATA
 }
 
@@ -28,11 +28,12 @@ _retroarch_usage() {
   cat <<'EOF_USAGE'
 Usage: ./aob build retroarch [options]
 
-Builds an ARM64 RetroArch debug APK and an FCEUmm core artifact.
-The core is produced separately and is not yet bundled inside the APK.
+Builds an ARM64 RetroArch debug APK with FCEUmm bundled inside it.
+The core is copied into RetroArch's writable core directory on first launch.
+A standalone core artifact is also retained for verification.
 
 Options:
-  --cores fceumm      Core selection; only fceumm is supported in this smoke build
+  --cores fceumm      Core selection; only fceumm is supported in this build
   --jobs N            Parallel build jobs; defaults to AOB_BUILD_JOBS or host CPU count
   --no-clean          Skip Gradle clean before assembling the APK
   -h, --help          Show this help
@@ -54,7 +55,7 @@ _retroarch_preflight() {
   local ndk_build="$ndk_dir/ndk-build"
   local command_name
 
-  for command_name in git python3 jq sha256sum stat tee awk find readlink; do
+  for command_name in git python3 jq sha256sum stat tee awk find readlink unzip grep; do
     aob_command_exists "$command_name" || aob_die "$AOB_EXIT_PREREQUISITE" "Required command is missing: $command_name"
   done
 
@@ -67,6 +68,8 @@ _retroarch_preflight() {
     aob_die "$AOB_EXIT_PREREQUISITE" "Android Build Tools are missing: $ANDROID_BUILD_TOOLS"
   [[ -x "$ndk_build" ]] || \
     aob_die "$AOB_EXIT_PREREQUISITE" "Android ndk-build is missing: $ndk_build"
+  [[ -f "$_retroarch_builder_dir/BundledCoreInstaller.java" ]] || \
+    aob_die "$AOB_EXIT_PREREQUISITE" 'BundledCoreInstaller.java is missing from the builder.'
 }
 
 _retroarch_checkout() {
@@ -90,6 +93,8 @@ _retroarch_checkout() {
 _retroarch_prepare_frontend() {
   local source_dir="$1" jobs="$2"
   local gradle_file="$source_dir/pkg/android/phoenix/build.gradle"
+  local main_activity="$source_dir/pkg/android/phoenix/src/com/retroarch/browser/mainmenu/MainMenuActivity.java"
+  local installer_dir="$source_dir/pkg/android/phoenix/src/com/retroarch/browser"
   local local_properties="$source_dir/pkg/android/phoenix/local.properties"
 
   aob_info "Fetching RetroArch submodules"
@@ -97,15 +102,19 @@ _retroarch_prepare_frontend() {
   git -C "$source_dir" -c protocol.version=2 submodule update \
     --init --recursive --depth 1 --jobs "$jobs"
 
-  python3 - "$gradle_file" "$RETROARCH_APPLICATION_ID_SUFFIX" "$RETROARCH_APP_NAME" <<'PY'
+  python3 - "$gradle_file" "$main_activity" "$RETROARCH_APPLICATION_ID_SUFFIX" \
+    "$RETROARCH_APP_NAME" "$FCEUMM_REVISION" <<'PY'
 from pathlib import Path
 import sys
 
-path = Path(sys.argv[1])
-suffix = sys.argv[2]
-app_name = sys.argv[3]
-text = path.read_text()
-old = """    aarch64 {
+gradle_path = Path(sys.argv[1])
+activity_path = Path(sys.argv[2])
+suffix = sys.argv[3]
+app_name = sys.argv[4]
+core_revision = sys.argv[5]
+
+gradle_text = gradle_path.read_text()
+old_flavor = """    aarch64 {
       applicationIdSuffix '.aarch64'
       resValue \"string\", \"app_name\", \"RetroArch (AArch64)\"
       buildConfigField \"boolean\", \"PLAY_STORE_BUILD\", \"false\"
@@ -115,20 +124,42 @@ old = """    aarch64 {
         abiFilters 'arm64-v8a', 'x86_64'
       }
     }"""
-new = f"""    aarch64 {{
+new_flavor = f"""    aarch64 {{
       applicationIdSuffix '{suffix}'
       resValue \"string\", \"app_name\", \"{app_name}\"
       buildConfigField \"boolean\", \"PLAY_STORE_BUILD\", \"false\"
+      buildConfigField \"String\", \"BUNDLED_FCEUMM_REVISION\", '\"{core_revision}\"'
 
       dimension \"variant\"
       ndk {{
         abiFilters 'arm64-v8a'
       }}
     }}"""
-if text.count(old) != 1:
+if gradle_text.count(old_flavor) != 1:
     raise SystemExit("Pinned RetroArch aarch64 Gradle block was not found exactly once")
-path.write_text(text.replace(old, new))
+gradle_path.write_text(gradle_text.replace(old_flavor, new_flavor))
+
+activity_text = activity_path.read_text()
+import_anchor = "import com.retroarch.BuildConfig;\n"
+startup_anchor = "\tpublic void finalStartup()\n\t{\n\t\tIntent retro = new Intent(this, RetroActivityFuture.class);"
+if activity_text.count(import_anchor) != 1:
+    raise SystemExit("Pinned MainMenuActivity import anchor was not found exactly once")
+if activity_text.count(startup_anchor) != 1:
+    raise SystemExit("Pinned MainMenuActivity startup anchor was not found exactly once")
+activity_text = activity_text.replace(
+    import_anchor,
+    import_anchor + "import com.retroarch.browser.BundledCoreInstaller;\n",
+)
+activity_text = activity_text.replace(
+    startup_anchor,
+    "\tpublic void finalStartup()\n\t{\n\t\tBundledCoreInstaller.install(this);\n\n\t\tIntent retro = new Intent(this, RetroActivityFuture.class);",
+)
+activity_path.write_text(activity_text)
 PY
+
+  mkdir -p -- "$installer_dir"
+  cp -- "$_retroarch_builder_dir/BundledCoreInstaller.java" \
+    "$installer_dir/BundledCoreInstaller.java"
 
   cat > "$local_properties" <<EOF_PROPERTIES
 sdk.dir=$AOB_ANDROID_SDK_ROOT
@@ -155,6 +186,17 @@ _retroarch_build_core() {
     return 1
   }
   RETROARCH_CORE_OUTPUT="$core_output"
+}
+
+_retroarch_stage_core() {
+  local source_dir="$1"
+  local staged_dir="$source_dir/pkg/android/phoenix-common/libs/$RETROARCH_TARGET_ABI"
+  local staged_core="$staged_dir/libfceumm_libretro_android.so"
+
+  aob_info "Staging FCEUmm inside the Android APK"
+  mkdir -p -- "$staged_dir"
+  cp -- "$RETROARCH_CORE_OUTPUT" "$staged_core"
+  chmod 0755 "$staged_core"
 }
 
 _retroarch_build_frontend() {
@@ -200,6 +242,18 @@ _retroarch_build_frontend() {
   RETROARCH_APK_OUTPUT="${apks[0]}"
 }
 
+_retroarch_verify_bundled_core() {
+  local apk="$1"
+  local expected_path="lib/$RETROARCH_TARGET_ABI/libfceumm_libretro_android.so"
+
+  if ! unzip -Z1 "$apk" | grep -Fx -- "$expected_path" >/dev/null; then
+    aob_error "Bundled FCEUmm core was not found in APK at: $expected_path"
+    return 1
+  fi
+
+  aob_ok "Bundled core verified in APK: $expected_path"
+}
+
 _retroarch_write_manifest() {
   local artifact_dir="$1" build_id="$2" apk_name="$3" core_name="$4"
   local frontend_dir="$5" core_dir="$6"
@@ -232,7 +286,7 @@ _retroarch_write_manifest() {
     --arg core_sha256 "$core_sha" \
     --argjson core_size "$core_size" \
     '{
-      schema_version: 1,
+      schema_version: 2,
       build_id: $build_id,
       project: "retroarch",
       builder_revision: $builder_revision,
@@ -241,7 +295,12 @@ _retroarch_write_manifest() {
       target_abi: $abi,
       application_id: $application_id,
       application_name: $app_name,
-      core_bundled_in_apk: false,
+      core_bundled_in_apk: true,
+      bundled_core: {
+        id: "fceumm",
+        apk_path: ("lib/" + $abi + "/libfceumm_libretro_android.so"),
+        install_path: "cores/fceumm_libretro_android.so"
+      },
       toolchain: {
         android_platform: $android_platform,
         build_tools: $build_tools,
@@ -270,7 +329,9 @@ _retroarch_execute() {
   _retroarch_checkout "FCEUmm" "$FCEUMM_REPOSITORY" "$FCEUMM_REVISION" "$core_dir" || return $?
   _retroarch_prepare_frontend "$frontend_dir" "$jobs" || return $?
   _retroarch_build_core "$core_dir" "$jobs" || return $?
+  _retroarch_stage_core "$frontend_dir" || return $?
   _retroarch_build_frontend "$frontend_dir" "$jobs" "$clean" || return $?
+  _retroarch_verify_bundled_core "$RETROARCH_APK_OUTPUT" || return $?
 
   mkdir -p -- "$artifact_dir"
   cp -- "$RETROARCH_APK_OUTPUT" "$artifact_dir/$apk_name"
@@ -282,7 +343,7 @@ _retroarch_execute() {
   _retroarch_write_manifest "$artifact_dir" "$build_id" "$apk_name" "$core_name" \
     "$frontend_dir" "$core_dir"
 
-  aob_ok "RetroArch smoke build completed"
+  aob_ok "RetroArch bundled-core build completed"
   printf 'Artifacts: %s\n' "$artifact_dir"
 }
 
@@ -312,7 +373,7 @@ builder_main() {
   done
 
   [[ "$cores" == "fceumm" ]] || \
-    aob_die "$AOB_EXIT_USAGE" "This smoke builder currently supports only: --cores fceumm"
+    aob_die "$AOB_EXIT_USAGE" "This builder currently supports only: --cores fceumm"
 
   _retroarch_preflight
   jobs="$(_retroarch_resolve_jobs "$requested_jobs")"
