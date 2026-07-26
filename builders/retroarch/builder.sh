@@ -197,7 +197,6 @@ _retroarch_stage_core() {
   mkdir -p -- "$staged_dir"
   cp -- "$RETROARCH_CORE_OUTPUT" "$staged_core"
   chmod 0755 "$staged_core"
-  RETROARCH_STAGED_CORE="$staged_core"
 }
 
 _retroarch_build_frontend() {
@@ -323,7 +322,7 @@ _retroarch_execute() {
   local apk_name="RetroArch-AOB-$RETROARCH_TARGET_ABI-debug.apk"
   local core_name="fceumm_libretro_android.so"
 
-  unset RETROARCH_APK_OUTPUT RETROARCH_CORE_OUTPUT RETROARCH_STAGED_CORE || true
+  unset RETROARCH_APK_OUTPUT RETROARCH_CORE_OUTPUT || true
 
   mkdir -p -- "$work_root"
   _retroarch_checkout "RetroArch" "$RETROARCH_REPOSITORY" "$RETROARCH_REVISION" "$frontend_dir" || return $?
