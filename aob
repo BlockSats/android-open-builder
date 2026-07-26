@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+AOB_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+export AOB_ROOT
+# shellcheck source=lib/common.sh
+source "$AOB_ROOT/lib/common.sh"
+# shellcheck source=lib/config.sh
+source "$AOB_ROOT/lib/config.sh"
+aob_load_config
+
+show_help() {
+  cat <<'EOF_HELP'
+Android Open Builder
+
+Usage:
+  ./aob <command> [options]
+
+Commands:
+  doctor [--strict]       Inspect the host without modifying it
+  list                    List available builders
+  info <builder>          Show builder metadata
+  build <builder>         Run a builder (RetroArch is not implemented yet)
+  paths                   Show resolved local paths
+  version                 Show the project version
+  help                    Show this help
+EOF_HELP
+}
+
+command_name="${1:-help}"
+if (($#)); then shift; fi
+
+case "$command_name" in
+  help|-h|--help)
+    show_help
+    ;;
+  version|--version)
+    printf 'Android Open Builder %s\n' "$AOB_PROJECT_VERSION"
+    ;;
+  doctor)
+    exec "$AOB_ROOT/scripts/doctor.sh" "$@"
+    ;;
+  list)
+    printf 'Available builders:\n'
+    while IFS= read -r builder; do
+      printf '  - %s\n' "$builder"
+    done < <(aob_list_builders)
+    ;;
+  paths)
+    aob_print_paths
+    ;;
+  info)
+    builder="${1:-}"
+    [[ -n "$builder" ]] || aob_die "$AOB_EXIT_USAGE" 'Usage: ./aob info <builder>'
+    aob_builder_exists "$builder" || aob_die "$AOB_EXIT_USAGE" "Unknown builder: $builder"
+    # shellcheck disable=SC1090,SC1091
+    source "$(aob_builder_dir "$builder")/builder.sh"
+    builder_metadata
+    ;;
+  build)
+    builder="${1:-${AOB_DEFAULT_BUILDER}}"
+    if (($#)); then shift; fi
+    aob_builder_exists "$builder" || aob_die "$AOB_EXIT_USAGE" "Unknown builder: $builder"
+    aob_ensure_runtime_dirs
+    # shellcheck disable=SC1090,SC1091
+    source "$(aob_builder_dir "$builder")/builder.sh"
+    builder_main "$@"
+    ;;
+  *)
+    aob_error "Unknown command: $command_name"
+    show_help >&2
+    exit "$AOB_EXIT_USAGE"
+    ;;
+esac

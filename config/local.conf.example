@@ -1,0 +1,7 @@
+# Copy to ~/.config/android-open-builder/config.conf and edit locally.
+# Only AOB_* keys known to the project are accepted.
+
+# AOB_DATA_DIR=/srv/android-open-builder
+# AOB_CACHE_DIR=/srv/cache/android-open-builder
+# AOB_ANDROID_SDK_ROOT=/opt/android-sdk
+# AOB_BUILD_JOBS=4
