@@ -1,15 +1,14 @@
 # RetroArch builder
 
-Status: **ARM64 smoke build**.
+Status: **ARM64 build with bundled FCEUmm core**.
 
-The builder currently creates two separate artifacts:
+The builder creates a customized RetroArch AArch64 debug APK and also retains a
+standalone FCEUmm Android ARM64 libretro core for verification.
 
-1. a customized RetroArch AArch64 debug APK;
-2. an FCEUmm Android ARM64 libretro core.
-
-The core is **not yet bundled inside the APK**. Core installation and packaging are
-reserved for a later pull request after the frontend and core compile successfully
-on the Debian 12 build host.
+FCEUmm is packaged inside the APK as a native library. On first launch, the
+included Java installer copies it into RetroArch's writable `cores` directory.
+The installer tracks the pinned FCEUmm revision and replaces the installed core
+when a future APK contains a different revision.
 
 ## Upstream pins
 
@@ -23,8 +22,6 @@ Build Tools 36.0.0, NDK 29.0.14206865, AGP 9.1.0, and Gradle 9.3.1.
 
 ## Build
 
-Run long builds inside `tmux` or another persistent terminal session:
-
 ```bash
 ./aob build retroarch --cores fceumm
 ```
@@ -35,6 +32,22 @@ Optional controls:
 ./aob build retroarch --cores fceumm --jobs 4
 ./aob build retroarch --cores fceumm --no-clean
 ```
+
+## APK packaging
+
+The core is staged in the APK at:
+
+```text
+lib/arm64-v8a/libfceumm_libretro_android.so
+```
+
+At first launch it is copied to the app-private RetroArch directory as:
+
+```text
+cores/fceumm_libretro_android.so
+```
+
+The builder verifies the APK entry before publishing artifacts.
 
 ## Output
 
@@ -47,5 +60,6 @@ Optional controls:
 └── build.log
 ```
 
-The workspace is reset to the pinned revisions before each build. Gradle and
-source directories are reused locally to reduce repeated downloads.
+The manifest uses schema version 2 and records both the APK path and installed
+core path. The workspace is reset to the pinned revisions before each build.
+Gradle and source directories are reused locally to reduce repeated downloads.
