@@ -65,9 +65,10 @@ mkdir -p "$AOB_DOWNLOAD_DIR" "$sdk_root/cmdline-tools"
 
 if [[ ! -f "$archive" ]] || [[ "$force" == true ]]; then
   printf 'Downloading Android command-line tools...\n'
+  printf 'URL: %s\n' "$url"
   tmp="${archive}.part"
   rm -f "$tmp"
-  curl --fail --location --retry 3 --output "$tmp" "$url"
+  curl --ipv4 --fail --location --retry 3 --output "$tmp" "$url"
   mv "$tmp" "$archive"
 fi
 
