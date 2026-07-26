@@ -18,12 +18,17 @@ Usage:
 
 Commands:
   doctor [--strict]       Inspect the host without modifying it
+  install [options]       Install the project-managed Android toolchain
   list                    List available builders
   info <builder>          Show builder metadata
   build <builder>         Run a builder (RetroArch is not implemented yet)
   paths                   Show resolved local paths
   version                 Show the project version
   help                    Show this help
+
+Install options:
+  --accept-licenses       Confirm acceptance of Android SDK licenses
+  --force                 Redownload and replace command-line tools
 EOF_HELP
 }
 
@@ -39,6 +44,9 @@ case "$command_name" in
     ;;
   doctor)
     exec "$AOB_ROOT/scripts/doctor.sh" "$@"
+    ;;
+  install)
+    exec "$AOB_ROOT/scripts/install-android-toolchain.sh" "$@"
     ;;
   list)
     printf 'Available builders:\n'
