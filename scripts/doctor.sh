@@ -108,9 +108,20 @@ fi
 printf '\nJava and Android toolchain\n'
 if aob_command_exists java; then
   java_line="$(java -version 2>&1 | head -n 1)"
-  if [[ "$java_line" =~ \"17([\.\"]|$) ]]; then pass "Java: $java_line"; else warn "Java 17 is expected; found $java_line"; fi
+  if [[ "$java_line" =~ \"17([\.\"]|$) ]]; then pass "Java runtime: $java_line"; else warn "Java 17 is expected; found $java_line"; fi
 else
-  fail "Java is missing"
+  fail "Java runtime is missing"
+fi
+
+if aob_command_exists javac; then
+  javac_line="$(javac -version 2>&1 | head -n 1)"
+  if [[ "$javac_line" =~ ^javac[[:space:]]17([\.]|$) ]]; then
+    pass "Java compiler: $javac_line"
+  else
+    warn "Java 17 compiler is expected; found $javac_line"
+  fi
+else
+  fail "Java compiler is missing; install openjdk-17-jdk-headless"
 fi
 
 if [[ -d "$AOB_ANDROID_SDK_ROOT" ]]; then
