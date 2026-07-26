@@ -46,7 +46,7 @@ case "$command_name" in
     exec "$AOB_ROOT/scripts/doctor.sh" "$@"
     ;;
   install)
-    exec "$AOB_ROOT/scripts/install-android-toolchain.sh" "$@"
+    exec bash "$AOB_ROOT/scripts/install-android-toolchain.sh" "$@"
     ;;
   list)
     printf 'Available builders:\n'
