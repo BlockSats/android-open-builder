@@ -13,7 +13,7 @@ export AOB_CONFIG_DIR="$TEST_HOME/config"
 "$ROOT/aob" version | grep -F 'Android Open Builder 0.1.0-dev' >/dev/null
 "$ROOT/aob" help | grep -F 'doctor' >/dev/null
 "$ROOT/aob" list | grep -F 'retroarch' >/dev/null
-"$ROOT/aob" info retroarch | grep -F 'status=scaffold' >/dev/null
+"$ROOT/aob" info retroarch | grep -F 'status=smoke-build' >/dev/null
 "$ROOT/aob" paths | grep -F "$TEST_HOME/data" >/dev/null
 
 if "$ROOT/aob" unknown-command >/dev/null 2>&1; then
