@@ -53,7 +53,7 @@ case "$command_name" in
     builder="${1:-}"
     [[ -n "$builder" ]] || aob_die "$AOB_EXIT_USAGE" 'Usage: ./aob info <builder>'
     aob_builder_exists "$builder" || aob_die "$AOB_EXIT_USAGE" "Unknown builder: $builder"
-    # shellcheck disable=SC1090
+    # shellcheck disable=SC1090,SC1091
     source "$(aob_builder_dir "$builder")/builder.sh"
     builder_metadata
     ;;
@@ -62,7 +62,7 @@ case "$command_name" in
     if (($#)); then shift; fi
     aob_builder_exists "$builder" || aob_die "$AOB_EXIT_USAGE" "Unknown builder: $builder"
     aob_ensure_runtime_dirs
-    # shellcheck disable=SC1090
+    # shellcheck disable=SC1090,SC1091
     source "$(aob_builder_dir "$builder")/builder.sh"
     builder_main "$@"
     ;;

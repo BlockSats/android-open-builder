@@ -45,7 +45,8 @@ aob_swap_total_mib() {
 }
 
 aob_disk_available_gib() {
-  local path="$1" existing="$path"
+  local path="$1"
+  local existing="$path"
   while [[ ! -e "$existing" && "$existing" != '/' ]]; do
     existing="${existing%/*}"
     [[ -n "$existing" ]] || existing='/'

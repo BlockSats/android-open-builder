@@ -25,23 +25,7 @@ jobs:
           done
 
       - name: Run ShellCheck
-        id: shellcheck
-        continue-on-error: true
-        run: shellcheck aob menu.sh lib/*.sh scripts/*.sh builders/*/*.sh tests/*.sh > shellcheck.log 2>&1
-
-      - name: Upload ShellCheck report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: shellcheck-report
-          path: shellcheck.log
-          retention-days: 1
+        run: shellcheck -x aob menu.sh lib/*.sh scripts/*.sh builders/*/*.sh tests/*.sh
 
       - name: Run tests
         run: bash tests/run.sh
-
-      - name: Enforce ShellCheck result
-        if: steps.shellcheck.outcome == 'failure'
-        run: |
-          cat shellcheck.log
-          exit 1

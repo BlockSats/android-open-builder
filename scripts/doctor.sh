@@ -2,11 +2,11 @@
 set -Eeuo pipefail
 
 AOB_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
-# shellcheck source=../lib/common.sh
+# shellcheck source=../lib/common.sh disable=SC1091
 source "$AOB_ROOT/lib/common.sh"
-# shellcheck source=../lib/config.sh
+# shellcheck source=../lib/config.sh disable=SC1091
 source "$AOB_ROOT/lib/config.sh"
-# shellcheck source=../lib/platform.sh
+# shellcheck source=../lib/platform.sh disable=SC1091
 source "$AOB_ROOT/lib/platform.sh"
 aob_load_config
 

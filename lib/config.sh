@@ -86,7 +86,7 @@ aob_load_config() {
   done
 
   aob_require_file "$defaults_file"
-  # shellcheck source=../config/defaults.conf
+  # shellcheck source=../config/defaults.conf disable=SC1091
   source "$defaults_file"
 
   local user_config="${AOB_CONFIG:-${AOB_CONFIG_DIR}/config.conf}"
