@@ -21,7 +21,7 @@ EOF_METADATA
 
 builder_doctor() {
   local ndk_build="$AOB_ANDROID_SDK_ROOT/ndk/$ANDROID_NDK_VERSION/ndk-build"
-  [[ -x "$ndk_build" ]]
+  [[ -x "$ndk_build" ]] && aob_command_exists javac
 }
 
 _retroarch_usage() {
@@ -54,9 +54,12 @@ _retroarch_preflight() {
   local ndk_build="$ndk_dir/ndk-build"
   local command_name
 
-  for command_name in git python3 jq sha256sum stat tee awk find; do
+  for command_name in git python3 jq sha256sum stat tee awk find readlink; do
     aob_command_exists "$command_name" || aob_die "$AOB_EXIT_PREREQUISITE" "Required command is missing: $command_name"
   done
+
+  aob_command_exists javac || aob_die "$AOB_EXIT_PREREQUISITE" \
+    'Java 17 JDK is required, but javac is missing. Install openjdk-17-jdk-headless.'
 
   [[ -d "$AOB_ANDROID_SDK_ROOT/platforms/$ANDROID_PLATFORM" ]] || \
     aob_die "$AOB_EXIT_PREREQUISITE" "Android platform is missing: $ANDROID_PLATFORM"
@@ -88,7 +91,6 @@ _retroarch_prepare_frontend() {
   local source_dir="$1" jobs="$2"
   local gradle_file="$source_dir/pkg/android/phoenix/build.gradle"
   local local_properties="$source_dir/pkg/android/phoenix/local.properties"
-  local ndk_dir="$AOB_ANDROID_SDK_ROOT/ndk/$ANDROID_NDK_VERSION"
 
   aob_info "Fetching RetroArch submodules"
   git -C "$source_dir" submodule sync --recursive
@@ -130,7 +132,6 @@ PY
 
   cat > "$local_properties" <<EOF_PROPERTIES
 sdk.dir=$AOB_ANDROID_SDK_ROOT
-ndk.dir=$ndk_dir
 EOF_PROPERTIES
 }
 
@@ -159,8 +160,11 @@ _retroarch_build_core() {
 _retroarch_build_frontend() {
   local source_dir="$1" jobs="$2" clean="$3"
   local gradle_dir="$source_dir/pkg/android/phoenix"
+  local java_home
   local -a gradle_tasks=()
   local -a apks=()
+
+  java_home="$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")"
 
   if [[ "$clean" == true ]]; then
     gradle_tasks+=(clean)
@@ -168,13 +172,23 @@ _retroarch_build_frontend() {
   gradle_tasks+=("$RETROARCH_GRADLE_TASK")
 
   aob_info "Building RetroArch frontend with Gradle task $RETROARCH_GRADLE_TASK"
-  (
+  aob_info "Using Java home: $java_home"
+  if ! (
     cd "$gradle_dir"
+    JAVA_HOME="$java_home" \
     ANDROID_HOME="$AOB_ANDROID_SDK_ROOT" \
     ANDROID_SDK_ROOT="$AOB_ANDROID_SDK_ROOT" \
     GRADLE_USER_HOME="$AOB_CACHE_DIR/gradle" \
       ./gradlew --no-daemon --stacktrace --max-workers="$jobs" "${gradle_tasks[@]}"
-  )
+  ); then
+    aob_error "Gradle task failed: $RETROARCH_GRADLE_TASK"
+    return 1
+  fi
+
+  if [[ ! -d "$gradle_dir/build/outputs/apk" ]]; then
+    aob_error "Gradle APK output directory was not created: $gradle_dir/build/outputs/apk"
+    return 1
+  fi
 
   mapfile -t apks < <(find "$gradle_dir/build/outputs/apk" -type f \
     -name '*aarch64*debug*.apk' -print | sort)
@@ -249,13 +263,14 @@ _retroarch_execute() {
   local apk_name="RetroArch-AOB-$RETROARCH_TARGET_ABI-debug.apk"
   local core_name="fceumm_libretro_android.so"
 
-  mkdir -p -- "$work_root"
-  _retroarch_checkout "RetroArch" "$RETROARCH_REPOSITORY" "$RETROARCH_REVISION" "$frontend_dir"
-  _retroarch_checkout "FCEUmm" "$FCEUMM_REPOSITORY" "$FCEUMM_REVISION" "$core_dir"
-  _retroarch_prepare_frontend "$frontend_dir" "$jobs"
+  unset RETROARCH_APK_OUTPUT RETROARCH_CORE_OUTPUT || true
 
-  _retroarch_build_core "$core_dir" "$jobs"
-  _retroarch_build_frontend "$frontend_dir" "$jobs" "$clean"
+  mkdir -p -- "$work_root"
+  _retroarch_checkout "RetroArch" "$RETROARCH_REPOSITORY" "$RETROARCH_REVISION" "$frontend_dir" || return $?
+  _retroarch_checkout "FCEUmm" "$FCEUMM_REPOSITORY" "$FCEUMM_REVISION" "$core_dir" || return $?
+  _retroarch_prepare_frontend "$frontend_dir" "$jobs" || return $?
+  _retroarch_build_core "$core_dir" "$jobs" || return $?
+  _retroarch_build_frontend "$frontend_dir" "$jobs" "$clean" || return $?
 
   mkdir -p -- "$artifact_dir"
   cp -- "$RETROARCH_APK_OUTPUT" "$artifact_dir/$apk_name"
